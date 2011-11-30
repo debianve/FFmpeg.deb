@@ -1,7 +1,7 @@
 libav (4:0.8.7-0.1) UNRELEASED; urgency=low
 
   * Non-maintainer upload.
-  * 
+  * Added libswresample0 and libswresample-dev.
 
  --  <ghostbar@debian.org>  Mon, 28 Nov 2011 22:55:34 -0430
 
