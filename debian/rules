@@ -107,7 +107,7 @@ binary-arch: build install codecs.txt formats.txt
 	dh_testroot
 	dh_installman -pffmpeg debian/qt-faststart.1
 	dh_installdocs doc/optimization.txt
-	dh_installdocs -A CREDITS doc/TODO
+	dh_installdocs -A CREDITS
 	dh_installdocs -A debian/README.Debian
 	dh_installdocs -p libavcodec53 codecs.txt
 	dh_installdocs -p libavformat53 formats.txt
