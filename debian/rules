@@ -116,7 +116,7 @@ binary-arch: build install codecs.txt formats.txt
 		-plibswscale-dev -plibavutil-dev -plibav-doc \
 		doc/APIchanges
 	dh_installexamples -pffmpeg doc/ffserver.conf debian/recordshow.sh
-	dh_installexamples -plibavcodec-dev libavcodec/api-example.c
+	dh_installexamples -plibavcodec-dev doc/examples/decoding_encoding.c
 	dh_installchangelogs Changelog
 	dh_lintian
 	dh_link
