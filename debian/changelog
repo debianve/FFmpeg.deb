@@ -1,3 +1,9 @@
+ffmpeg (4:0.8.7~20111202+git-7b0b10ce41-1.stable1) stable; urgency=low
+
+  * 0.8.7~20111202+git-7b0b10ce41 for stable.
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Fri, 02 Dec 2011 01:25:49 -0430
+
 ffmpeg (4:0.8.7~20111202+git-7b0b10ce41-1) unstable; urgency=low
 
   * Changed maintainers on this package. Now this will be an unofficial
