@@ -1,18 +1,12 @@
-libav (4:0.8.7-0.1) UNRELEASED; urgency=low
+ffmpeg (4:0.8.7~20111127+git-ca55606a51-1) unstable; urgency=low
 
-  * Non-maintainer upload.
+  * Changed maintainers on this package. Now this will be an unofficial
+    version of FFmpeg for the development branch.
+  * Re-renamed to ffmpeg the sources.
+  * Updated to development branch.
   * Added libswresample0 and libswresample-dev.
 
- --  <ghostbar@debian.org>  Mon, 28 Nov 2011 22:55:34 -0430
-
-libav (4:0.7.2-1) unstable; urgency=low
-
-  * New upstream release: 0.7.2
-    - Security focused release
-    - Includes Matroska reallocation checks, Closes: #643859
-  * Drop all post 0.7.1 patches, included upstream.
-
- -- Reinhard Tartler <siretart@tauware.de>  Fri, 30 Sep 2011 21:01:25 +0200
+ -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 01 Dec 2011 20:56:55 -0430
 
 libav (4:0.7.1-7) unstable; urgency=medium
 
