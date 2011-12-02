@@ -1,12 +1,13 @@
-ffmpeg (4:0.8.7~20111127+git-ca55606a51-1) unstable; urgency=low
+ffmpeg (4:0.8.7~20111202+git-7b0b10ce41-1) unstable; urgency=low
 
   * Changed maintainers on this package. Now this will be an unofficial
     version of FFmpeg for the development branch.
   * Re-renamed to ffmpeg the sources.
   * Updated to development branch.
+  * Up-to-date with git commit 20111202+git-7b0b10ce41.
   * Added libswresample0 and libswresample-dev.
 
- -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 01 Dec 2011 20:56:55 -0430
+ -- Jose Luis Rivas <ghostbar@debian.org>  Thu, 01 Dec 2011 22:53:07 -0430
 
 libav (4:0.7.1-7) unstable; urgency=medium
 
