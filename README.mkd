@@ -1,0 +1,47 @@
+FFmpeg.deb
+==========
+
+This is FFmpeg's debianization sources. The package was created because
+Debian now is shipped with Libav instead of FFmpeg, and as they're from
+different upstream maintainers there are some differences in functions.
+
+How to Install
+--------------
+
+First, clone this repository:
+		$ git clone git://github.com/ghostbar/FFmpeg.deb.git
+
+Now checkout `pristine-tar` and `upstream` branches, fetch all tags and you now can use `git-buildpackage` to compile:
+		$ git checkout -t -b pristine-tar origin/pristine-tar
+		$ git checkout -t -b upstream origin/upstream
+		$ git fetch --tags
+		$ git checkout master
+		$ git-buildpackage
+
+Copyright and License
+---------------------
+The Debian packaging is copyright of several authors that maintained the package for Debian: Sam Hocevar, Loic Minier, Reinhard Tartler, Fabian Greffrath, Andres Mejia and Jonas Smedegaard; as of December 2011 the Debian packaing copyright is © 2011, Jose Luis Rivas.
+
+The Debian packaging prior to December of 2011 is LGPL according to `debian/copyright`, after that, all changes are licensed under the more permissive MIT-License:
+
+```
+Copyright © 2011 Jose Luis Rivas
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
