@@ -1,3 +1,13 @@
+ffmpeg (6:0.8.7+20111204+git3ba839a-1) unstable; urgency=low
+
+  * Up-to-date with @FFmpeg/FFmpeg.git:7f92f3d.
+  * Bumped epoch to 6 so this version is greater than Debian's and 
+    Marillat's ffmpeg versions.
+  * FFmpeg.deb's README.mkd is in upstream tarball, so dpkg now doesn't
+    complains.
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Sun, 04 Dec 2011 00:32:06 -0430
+
 ffmpeg (4:0.8.7~20111202+git-7b0b10ce41-1) unstable; urgency=low
 
   * Changed maintainers on this package. Now this will be an unofficial
