@@ -1,3 +1,9 @@
+ffmpeg (6:0.8.7+20111206+gitb404ab9-1) unstable; urgency=low
+
+  * Up-to-date with @FFmpeg/FFmpeg.git:b404ab9.
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Tue, 06 Dec 2011 00:36:29 -0430
+
 ffmpeg (6:0.8.7+20111204+git3ba839a-1) unstable; urgency=low
 
   * Up-to-date with @FFmpeg/FFmpeg.git:7f92f3d.
