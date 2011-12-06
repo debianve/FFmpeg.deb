@@ -268,6 +268,11 @@ do_video_encoding dnxhd-720p-10bit.dnxhd "-s hd720 -b 90M -pix_fmt yuv422p10 -vf
 do_video_decoding "" "-s cif -pix_fmt yuv420p"
 fi
 
+if [ -n "$do_mpng" ] ; then
+do_video_encoding mpng.avi "-an -vcodec png"
+do_video_decoding "" "-pix_fmt yuv420p"
+fi
+
 if [ -n "$do_prores" ] ; then
 do_video_encoding prores.mov "-vcodec prores"
 do_video_decoding "" "-pix_fmt yuv420p"
@@ -309,8 +314,23 @@ do_video_encoding rgb.avi "-an -vcodec rawvideo -pix_fmt bgr24"
 do_video_decoding "" "-pix_fmt yuv420p"
 fi
 
+if [ -n "$do_v210" ] ; then
+do_video_encoding v210.avi "-an -vcodec v210"
+do_video_decoding "" "-pix_fmt yuv420p"
+fi
+
 if [ -n "$do_yuv" ] ; then
 do_video_encoding yuv.avi "-an -vcodec rawvideo -pix_fmt yuv420p"
+do_video_decoding "" "-pix_fmt yuv420p"
+fi
+
+if [ -n "$do_zlib" ] ; then
+do_video_encoding zlib.avi "-an -vcodec zlib"
+do_video_decoding "" "-pix_fmt yuv420p"
+fi
+
+if [ -n "$do_zmbv" ] ; then
+do_video_encoding zmbv.avi "-an -vcodec zmbv"
 do_video_decoding "" "-pix_fmt yuv420p"
 fi
 
@@ -329,6 +349,11 @@ fi
 
 if [ -n "$do_g723_1" ] ; then
 do_audio_encoding g723_1.tco "-b:a 6.3k -ac 1 -ar 8000 -acodec g723_1"
+do_audio_decoding
+fi
+
+if [ -n "$do_g722" ] ; then
+do_audio_encoding g722.wav "-b 64k -ac 1 -ar 16000 -acodec g722"
 do_audio_decoding
 fi
 
