@@ -1,3 +1,9 @@
+ffmpeg (6:2.0.1-1) UNRELEASED; urgency=low
+
+  * New upstream release
+
+ -- Jose Luis Rivas <ghostbar@debian.org>  Sun, 01 Sep 2013 00:10:45 -0430
+
 ffmpeg (6:0.8.7+20111206+gitb404ab9-1) unstable; urgency=low
 
   * Up-to-date with @FFmpeg/FFmpeg.git:b404ab9.
