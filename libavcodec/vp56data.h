@@ -34,8 +34,6 @@ typedef enum {
     VP56_FRAME_PREVIOUS = 1,
     VP56_FRAME_GOLDEN   = 2,
     VP56_FRAME_GOLDEN2  = 3,
-    VP56_FRAME_UNUSED   = 4,
-    VP56_FRAME_UNUSED2  = 5,
 } VP56Frame;
 
 typedef enum {
@@ -51,19 +49,19 @@ typedef enum {
     VP56_MB_INTER_V2_GF    = 9,  /**< Inter MB, second vector, from golden frame */
 } VP56mb;
 
-typedef struct {
+typedef struct VP56Tree {
   int8_t val;
   int8_t prob_idx;
 } VP56Tree;
 
-extern const uint8_t vp56_b2p[];
-extern const uint8_t vp56_b6to4[];
-extern const uint8_t vp56_coeff_parse_table[6][11];
-extern const uint8_t vp56_def_mb_types_stats[3][10][2];
-extern const VP56Tree vp56_pva_tree[];
-extern const VP56Tree vp56_pc_tree[];
-extern const uint8_t vp56_coeff_bias[];
-extern const uint8_t vp56_coeff_bit_length[];
+extern const uint8_t ff_vp56_b2p[];
+extern const uint8_t ff_vp56_b6to4[];
+extern const uint8_t ff_vp56_coeff_parse_table[6][11];
+extern const uint8_t ff_vp56_def_mb_types_stats[3][10][2];
+extern const VP56Tree ff_vp56_pva_tree[];
+extern const VP56Tree ff_vp56_pc_tree[];
+extern const uint8_t ff_vp56_coeff_bias[];
+extern const uint8_t ff_vp56_coeff_bit_length[];
 
 static const VP56Frame vp56_reference_frame[] = {
     VP56_FRAME_PREVIOUS,  /* VP56_MB_INTER_NOVEC_PF */

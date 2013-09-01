@@ -6,16 +6,18 @@ sub FFmpeg_end_section($$)
 
 $EXTRA_HEAD =
 '<link rel="icon" href="favicon.png" type="image/png" />
-<link rel="stylesheet" type="text/css" href="default.css" />
 ';
 
+$CSS_LINES = $ENV{"FFMPEG_CSS"} || <<EOT;
+<link rel="stylesheet" type="text/css" href="default.css" />
+EOT
 
-my $FFMPEG_NAVBAR = $ENV{"FFMPEG_NAVBAR"} || '';
-
-$AFTER_BODY_OPEN =
-'<div id="container">' .
-"\n$FFMPEG_NAVBAR\n" .
-'<div id="body">';
+my $TEMPLATE_HEADER = $ENV{"FFMPEG_HEADER"} || <<EOT;
+<link rel="icon" href="favicon.png" type="image/png" />
+</head>
+<body>
+<div id="container">
+EOT
 
 $PRE_BODY_CLOSE = '</div></div>';
 
@@ -26,16 +28,47 @@ $print_page_foot = \&FFmpeg_print_page_foot;
 sub FFmpeg_print_page_foot($$)
 {
     my $fh = shift;
-    print $fh '<div id="footer">' . "\n";
-    T2H_DEFAULT_print_page_foot($fh);
-    print $fh "</div>\n";
+    my $program_string = defined &T2H_DEFAULT_program_string ?
+        T2H_DEFAULT_program_string() : program_string();
+    print $fh '<footer class="footer pagination-right">' . "\n";
+    print $fh '<span class="label label-info">' . $program_string;
+    print $fh "</span></footer></div>\n";
+}
+
+$float = \&FFmpeg_float;
+
+sub FFmpeg_float($$$$)
+{
+    my $text = shift;
+    my $float = shift;
+    my $caption = shift;
+    my $shortcaption = shift;
+
+    my $label = '';
+    if (exists($float->{'id'}))
+    {
+        $label = &$anchor($float->{'id'});
+    }
+    my $class = '';
+    my $subject = '';
+
+    if ($caption =~ /NOTE/)
+    {
+        $class = "alert alert-info";
+    }
+    elsif ($caption =~ /IMPORTANT/)
+    {
+        $class = "alert alert-warning";
+    }
+
+    return '<div class="float ' . $class . '">' . "$label\n" . $text . '</div>';
 }
 
 $print_page_head = \&FFmpeg_print_page_head;
 sub FFmpeg_print_page_head($$)
 {
     my $fh = shift;
-    my $longtitle = "$Texi2HTML::THISDOC{'title_no_texi'}";
+    my $longtitle = "$Texi2HTML::THISDOC{'fulltitle_no_texi'}";
     $longtitle .= ": $Texi2HTML::NO_TEXI{'This'}" if exists $Texi2HTML::NO_TEXI{'This'};
     my $description = $DOCUMENT_DESCRIPTION;
     $description = $longtitle if (!defined($description));
@@ -48,7 +81,7 @@ sub FFmpeg_print_page_head($$)
     $longtitle = "FFmpeg documentation : " . $longtitle;
 
     print $fh <<EOT;
-$DOCTYPE
+<!DOCTYPE html>
 <html>
 $Texi2HTML::THISDOC{'copying'}<!-- Created on $Texi2HTML::THISDOC{today} by $Texi2HTML::THISDOC{program} -->
 <!--
@@ -64,13 +97,12 @@ $description
 <meta name="Generator" content="$Texi2HTML::THISDOC{program}">
 $encoding
 $CSS_LINES
-$EXTRA_HEAD
-</head>
-
-<body $BODYTEXT>
-$AFTER_BODY_OPEN
+$TEMPLATE_HEADER
 EOT
 }
+
+# declare encoding in header
+$IN_ENCODING = $ENCODING = "utf-8";
 
 # no navigation elements
 $SECTION_NAVIGATION = 0;

@@ -64,12 +64,23 @@ static av_always_inline void ffio_wfourcc(AVIOContext *pb, const uint8_t *s)
  * @return 0 in case of success, a negative value corresponding to an
  * AVERROR code in case of failure
  */
-int ffio_rewind_with_probe_data(AVIOContext *s, unsigned char *buf, int buf_size);
+int ffio_rewind_with_probe_data(AVIOContext *s, unsigned char **buf, int buf_size);
 
 uint64_t ffio_read_varlen(AVIOContext *bc);
 
 /** @warning must be called before any I/O */
 int ffio_set_buf_size(AVIOContext *s, int buf_size);
+
+/**
+ * Ensures that the requested seekback buffer size will be available
+ *
+ * Will ensure that when reading sequentially up to buf_size, seeking
+ * within the current pos and pos+buf_size is possible.
+ * Once the stream position moves outside this window this gurantee is lost.
+ */
+int ffio_ensure_seekback(AVIOContext *s, int buf_size);
+
+int ffio_limit(AVIOContext *s, int size);
 
 void ffio_init_checksum(AVIOContext *s,
                         unsigned long (*update_checksum)(unsigned long c, const uint8_t *p, unsigned int len),
@@ -81,7 +92,7 @@ unsigned long ff_crc04C11DB7_update(unsigned long checksum, const uint8_t *buf,
 /**
  * Open a write only packetized memory stream with a maximum packet
  * size of 'max_packet_size'.  The stream is stored in a memory buffer
- * with a big endian 4 byte header giving the packet size in bytes.
+ * with a big-endian 4 byte header giving the packet size in bytes.
  *
  * @param s new IO context
  * @param max_packet_size maximum packet size (must be > 0)

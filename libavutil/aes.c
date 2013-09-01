@@ -33,13 +33,18 @@ typedef union {
 
 typedef struct AVAES {
     // Note: round_key[16] is accessed in the init code, but this only
-    // overwrites state, which does not matter (see also r7471).
+    // overwrites state, which does not matter (see also commit ba554c0).
     av_aes_block round_key[15];
     av_aes_block state[2];
     int rounds;
 } AVAES;
 
 const int av_aes_size= sizeof(AVAES);
+
+struct AVAES *av_aes_alloc(void)
+{
+    return av_mallocz(sizeof(struct AVAES));
+}
 
 static const uint8_t rcon[10] = {
   0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36

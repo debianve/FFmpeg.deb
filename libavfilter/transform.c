@@ -25,6 +25,7 @@
  */
 
 #include "libavutil/common.h"
+#include "libavutil/avassert.h"
 
 #include "transform.h"
 
@@ -116,23 +117,36 @@ void avfilter_get_matrix(float x_shift, float y_shift, float angle, float zoom, 
 
 void avfilter_add_matrix(const float *m1, const float *m2, float *result)
 {
-    for (int i = 0; i < 9; i++)
+    int i;
+    for (i = 0; i < 9; i++)
         result[i] = m1[i] + m2[i];
 }
 
 void avfilter_sub_matrix(const float *m1, const float *m2, float *result)
 {
-    for (int i = 0; i < 9; i++)
+    int i;
+    for (i = 0; i < 9; i++)
         result[i] = m1[i] - m2[i];
 }
 
 void avfilter_mul_matrix(const float *m1, float scalar, float *result)
 {
-    for (int i = 0; i < 9; i++)
+    int i;
+    for (i = 0; i < 9; i++)
         result[i] = m1[i] * scalar;
 }
 
-void avfilter_transform(const uint8_t *src, uint8_t *dst,
+static inline int mirror(int v, int m)
+{
+    while ((unsigned)v > (unsigned)m) {
+        v = -v;
+        if (v < 0)
+            v += 2 * m;
+    }
+    return v;
+}
+
+int avfilter_transform(const uint8_t *src, uint8_t *dst,
                         int src_stride, int dst_stride,
                         int width, int height, const float *matrix,
                         enum InterpolateMethod interpolate,
@@ -153,6 +167,8 @@ void avfilter_transform(const uint8_t *src, uint8_t *dst,
         case INTERPOLATE_BIQUADRATIC:
             func = interpolate_biquadratic;
             break;
+        default:
+            return AVERROR(EINVAL);
     }
 
     for (y = 0; y < height; y++) {
@@ -170,13 +186,17 @@ void avfilter_transform(const uint8_t *src, uint8_t *dst,
                     def = src[(int)y_s * src_stride + (int)x_s];
                     break;
                 case FILL_MIRROR:
-                    y_s = (y_s < 0) ? -y_s : (y_s >= height) ? (height + height - y_s) : y_s;
-                    x_s = (x_s < 0) ? -x_s : (x_s >= width) ? (width + width - x_s) : x_s;
+                    x_s = mirror(x_s,  width-1);
+                    y_s = mirror(y_s, height-1);
+
+                    av_assert2(x_s >= 0 && y_s >= 0);
+                    av_assert2(x_s < width && y_s < height);
                     def = src[(int)y_s * src_stride + (int)x_s];
             }
 
             dst[y * dst_stride + x] = func(x_s, y_s, src, width, height, src_stride, def);
         }
     }
+    return 0;
 }
 
