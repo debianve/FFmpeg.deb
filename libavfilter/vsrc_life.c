@@ -26,11 +26,16 @@
 /* #define DEBUG */
 
 #include "libavutil/file.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/lfg.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/random_seed.h"
+#include "libavutil/avstring.h"
 #include "avfilter.h"
+#include "internal.h"
+#include "formats.h"
+#include "video.h"
 
 typedef struct {
     const AVClass *class;
@@ -39,48 +44,59 @@ typedef struct {
     char *rule_str;
     uint8_t *file_buf;
     size_t file_bufsize;
-    char *buf[2];
+
+    /**
+     * The two grid state buffers.
+     *
+     * A 0xFF (ALIVE_CELL) value means the cell is alive (or new born), while
+     * the decreasing values from 0xFE to 0 means the cell is dead; the range
+     * of values is used for the slow death effect, or mold (0xFE means dead,
+     * 0xFD means very dead, 0xFC means very very dead... and 0x00 means
+     * definitely dead/mold).
+     */
+    uint8_t *buf[2];
+
     uint8_t  buf_idx;
     uint16_t stay_rule;         ///< encode the behavior for filled cells
     uint16_t born_rule;         ///< encode the behavior for empty cells
     uint64_t pts;
-    AVRational time_base;
-    char *size;                 ///< video frame size
-    char *rate;                 ///< video frame rate
+    AVRational frame_rate;
     double   random_fill_ratio;
     uint32_t random_seed;
     int stitch;
+    int mold;
+    uint8_t  life_color[4];
+    uint8_t death_color[4];
+    uint8_t  mold_color[4];
     AVLFG lfg;
+    void (*draw)(AVFilterContext*, AVFrame*);
 } LifeContext;
 
+#define ALIVE_CELL 0xFF
 #define OFFSET(x) offsetof(LifeContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption life_options[] = {
-    { "filename", "set source file",  OFFSET(filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0 },
-    { "f",        "set source file",  OFFSET(filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0 },
-    { "size",     "set video size",   OFFSET(size),     AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0 },
-    { "s",        "set video size",   OFFSET(size),     AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0 },
-    { "rate",     "set video rate",   OFFSET(rate),     AV_OPT_TYPE_STRING, {.str = "25"}, 0, 0 },
-    { "r",        "set video rate",   OFFSET(rate),     AV_OPT_TYPE_STRING, {.str = "25"}, 0, 0 },
-    { "rule",     "set rule",         OFFSET(rule_str), AV_OPT_TYPE_STRING, {.str = "B3/S23"}, CHAR_MIN, CHAR_MAX },
-    { "random_fill_ratio", "set fill ratio for filling initial grid randomly", OFFSET(random_fill_ratio), AV_OPT_TYPE_DOUBLE, {.dbl=1/M_PHI}, 0, 1 },
-    { "ratio",             "set fill ratio for filling initial grid randomly", OFFSET(random_fill_ratio), AV_OPT_TYPE_DOUBLE, {.dbl=1/M_PHI}, 0, 1 },
-    { "random_seed", "set the seed for filling the initial grid randomly", OFFSET(random_seed), AV_OPT_TYPE_INT, {.dbl=-1}, -1, UINT32_MAX },
-    { "seed",        "set the seed for filling the initial grid randomly", OFFSET(random_seed), AV_OPT_TYPE_INT, {.dbl=-1}, -1, UINT32_MAX },
-    { "stitch",      "stitch boundaries", OFFSET(stitch), AV_OPT_TYPE_INT, {.dbl=1}, 0, 1 },
+    { "filename", "set source file",  OFFSET(filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
+    { "f",        "set source file",  OFFSET(filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
+    { "size",     "set video size",   OFFSET(w),        AV_OPT_TYPE_IMAGE_SIZE, {.str = NULL}, 0, 0, FLAGS },
+    { "s",        "set video size",   OFFSET(w),        AV_OPT_TYPE_IMAGE_SIZE, {.str = NULL}, 0, 0, FLAGS },
+    { "rate",     "set video rate",   OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, 0, FLAGS },
+    { "r",        "set video rate",   OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, 0, FLAGS },
+    { "rule",     "set rule",         OFFSET(rule_str), AV_OPT_TYPE_STRING, {.str = "B3/S23"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "random_fill_ratio", "set fill ratio for filling initial grid randomly", OFFSET(random_fill_ratio), AV_OPT_TYPE_DOUBLE, {.dbl=1/M_PHI}, 0, 1, FLAGS },
+    { "ratio",             "set fill ratio for filling initial grid randomly", OFFSET(random_fill_ratio), AV_OPT_TYPE_DOUBLE, {.dbl=1/M_PHI}, 0, 1, FLAGS },
+    { "random_seed", "set the seed for filling the initial grid randomly", OFFSET(random_seed), AV_OPT_TYPE_INT, {.i64=-1}, -1, UINT32_MAX, FLAGS },
+    { "seed",        "set the seed for filling the initial grid randomly", OFFSET(random_seed), AV_OPT_TYPE_INT, {.i64=-1}, -1, UINT32_MAX, FLAGS },
+    { "stitch",      "stitch boundaries", OFFSET(stitch), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS },
+    { "mold",        "set mold speed for dead cells", OFFSET(mold), AV_OPT_TYPE_INT, {.i64=0}, 0, 0xFF, FLAGS },
+    { "life_color",  "set life color",  OFFSET( life_color), AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "death_color", "set death color", OFFSET(death_color), AV_OPT_TYPE_COLOR, {.str="black"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "mold_color",  "set mold color",  OFFSET( mold_color), AV_OPT_TYPE_COLOR, {.str="black"}, CHAR_MIN, CHAR_MAX, FLAGS },
     { NULL },
 };
 
-static const char *life_get_name(void *ctx)
-{
-    return "life";
-}
-
-static const AVClass life_class = {
-    "LifeContext",
-    life_get_name,
-    life_options
-};
+AVFILTER_DEFINE_CLASS(life);
 
 static int parse_rule(uint16_t *born_rule, uint16_t *stay_rule,
                       const char *rule_str, void *log_ctx)
@@ -108,8 +124,8 @@ static int parse_rule(uint16_t *born_rule, uint16_t *stay_rule,
         if (*p)
             goto error;
     } else {
-        /* parse the rule as a number, expressed in the form STAY|(BORN<<9),
-         * where STAY and DEATH encode the corresponding 9-bits rule */
+        /* parse rule as a number, expressed in the form STAY|(BORN<<9),
+         * where STAY and BORN encode the corresponding 9-bits rule */
         long int rule = strtol(rule_str, &tail, 10);
         if (*tail)
             goto error;
@@ -135,7 +151,7 @@ static void show_life_grid(AVFilterContext *ctx)
         return;
     for (i = 0; i < life->h; i++) {
         for (j = 0; j < life->w; j++)
-            line[j] = life->buf[life->buf_idx][i*life->w + j] ? '@' : ' ';
+            line[j] = life->buf[life->buf_idx][i*life->w + j] == ALIVE_CELL ? '@' : ' ';
         line[j] = 0;
         av_log(ctx, AV_LOG_DEBUG, "%3d: %s\n", i, line);
     }
@@ -152,6 +168,7 @@ static int init_pattern_from_file(AVFilterContext *ctx)
     if ((ret = av_file_map(life->filename, &life->file_buf, &life->file_bufsize,
                            0, ctx)) < 0)
         return ret;
+    av_freep(&life->filename);
 
     /* prescan file to get the number of lines and the maximum width */
     w = 0;
@@ -164,7 +181,7 @@ static int init_pattern_from_file(AVFilterContext *ctx)
     }
     av_log(ctx, AV_LOG_DEBUG, "h:%d max_w:%d\n", h, max_w);
 
-    if (life->size) {
+    if (life->w) {
         if (max_w > life->w || h > life->h) {
             av_log(ctx, AV_LOG_ERROR,
                    "The specified size is %dx%d which cannot contain the provided file size of %dx%d\n",
@@ -192,7 +209,7 @@ static int init_pattern_from_file(AVFilterContext *ctx)
             if (*p == '\n') {
                 p++; break;
             } else
-                life->buf[0][i*life->w + j] = !!isgraph(*(p++));
+                life->buf[0][i*life->w + j] = av_isgraph(*(p++)) ? ALIVE_CELL : 0;
         }
     }
     life->buf_idx = 0;
@@ -200,39 +217,20 @@ static int init_pattern_from_file(AVFilterContext *ctx)
     return 0;
 }
 
-static int init(AVFilterContext *ctx, const char *args, void *opaque)
+static int init(AVFilterContext *ctx)
 {
     LifeContext *life = ctx->priv;
-    AVRational frame_rate;
     int ret;
 
-    life->class = &life_class;
-    av_opt_set_defaults(life);
-
-    if ((ret = av_set_options_string(life, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
-        return ret;
-    }
-
-    if ((ret = av_parse_video_rate(&frame_rate, life->rate)) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Invalid frame rate: %s\n", life->rate);
-        return AVERROR(EINVAL);
-    }
-
-    if (!life->size && !life->filename)
+    if (!life->w && !life->filename)
         av_opt_set(life, "size", "320x240", 0);
-
-    if (life->size &&
-        (ret = av_parse_video_size(&life->w, &life->h, life->size)) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Invalid frame size: %s\n", life->size);
-        return ret;
-    }
 
     if ((ret = parse_rule(&life->born_rule, &life->stay_rule, life->rule_str, ctx)) < 0)
         return ret;
 
-    life->time_base.num = frame_rate.den;
-    life->time_base.den = frame_rate.num;
+    if (!life->mold && memcmp(life->mold_color, "\x00\x00\x00", 3))
+        av_log(ctx, AV_LOG_WARNING,
+               "Mold color is set while mold isn't, ignoring the color.\n");
 
     if (!life->filename) {
         /* fill the grid randomly */
@@ -252,7 +250,7 @@ static int init(AVFilterContext *ctx, const char *args, void *opaque)
         for (i = 0; i < life->w * life->h; i++) {
             double r = (double)av_lfg_get(&life->lfg) / UINT32_MAX;
             if (r <= life->random_fill_ratio)
-                life->buf[0][i] = 1;
+                life->buf[0][i] = ALIVE_CELL;
         }
         life->buf_idx = 0;
     } else {
@@ -260,10 +258,11 @@ static int init(AVFilterContext *ctx, const char *args, void *opaque)
             return ret;
     }
 
-    av_log(ctx, AV_LOG_INFO,
-           "s:%dx%d r:%d/%d rule:%s stay_rule:%d born_rule:%d stitch:%d\n",
-           life->w, life->h, frame_rate.num, frame_rate.den,
-           life->rule_str, life->stay_rule, life->born_rule, life->stitch);
+    av_log(ctx, AV_LOG_VERBOSE,
+           "s:%dx%d r:%d/%d rule:%s stay_rule:%d born_rule:%d stitch:%d seed:%u\n",
+           life->w, life->h, life->frame_rate.num, life->frame_rate.den,
+           life->rule_str, life->stay_rule, life->born_rule, life->stitch,
+           life->random_seed);
     return 0;
 }
 
@@ -283,7 +282,7 @@ static int config_props(AVFilterLink *outlink)
 
     outlink->w = life->w;
     outlink->h = life->h;
-    outlink->time_base = life->time_base;
+    outlink->time_base = av_inv_q(life->frame_rate);
 
     return 0;
 }
@@ -291,7 +290,7 @@ static int config_props(AVFilterLink *outlink)
 static void evolve(AVFilterContext *ctx)
 {
     LifeContext *life = ctx->priv;
-    int i, j, v;
+    int i, j;
     uint8_t *oldbuf = life->buf[ life->buf_idx];
     uint8_t *newbuf = life->buf[!life->buf_idx];
 
@@ -300,7 +299,7 @@ static void evolve(AVFilterContext *ctx)
     /* evolve the grid */
     for (i = 0; i < life->h; i++) {
         for (j = 0; j < life->w; j++) {
-            int pos[8][2], n;
+            int pos[8][2], n, alive, cell;
             if (life->stitch) {
                 pos[NW][0] = (i-1) < 0 ? life->h-1 : i-1; pos[NW][1] = (j-1) < 0 ? life->w-1 : j-1;
                 pos[N ][0] = (i-1) < 0 ? life->h-1 : i-1; pos[N ][1] =                         j  ;
@@ -322,24 +321,28 @@ static void evolve(AVFilterContext *ctx)
             }
 
             /* compute the number of live neighbor cells */
-            n = (pos[NW][0] == -1 || pos[NW][1] == -1 ? 0 : oldbuf[pos[NW][0]*life->w + pos[NW][1]]) +
-                (pos[N ][0] == -1 || pos[N ][1] == -1 ? 0 : oldbuf[pos[N ][0]*life->w + pos[N ][1]]) +
-                (pos[NE][0] == -1 || pos[NE][1] == -1 ? 0 : oldbuf[pos[NE][0]*life->w + pos[NE][1]]) +
-                (pos[W ][0] == -1 || pos[W ][1] == -1 ? 0 : oldbuf[pos[W ][0]*life->w + pos[W ][1]]) +
-                (pos[E ][0] == -1 || pos[E ][1] == -1 ? 0 : oldbuf[pos[E ][0]*life->w + pos[E ][1]]) +
-                (pos[SW][0] == -1 || pos[SW][1] == -1 ? 0 : oldbuf[pos[SW][0]*life->w + pos[SW][1]]) +
-                (pos[S ][0] == -1 || pos[S ][1] == -1 ? 0 : oldbuf[pos[S ][0]*life->w + pos[S ][1]]) +
-                (pos[SE][0] == -1 || pos[SE][1] == -1 ? 0 : oldbuf[pos[SE][0]*life->w + pos[SE][1]]);
-            v = !!(1<<n & (oldbuf[i*life->w + j] ? life->stay_rule : life->born_rule));
-            av_dlog(ctx, "i:%d j:%d live_neighbors:%d cell:%d -> cell:%d\n", i, j, n, oldbuf[i*life->w + j], v);
-            newbuf[i*life->w+j] = v;
+            n = (pos[NW][0] == -1 || pos[NW][1] == -1 ? 0 : oldbuf[pos[NW][0]*life->w + pos[NW][1]] == ALIVE_CELL) +
+                (pos[N ][0] == -1 || pos[N ][1] == -1 ? 0 : oldbuf[pos[N ][0]*life->w + pos[N ][1]] == ALIVE_CELL) +
+                (pos[NE][0] == -1 || pos[NE][1] == -1 ? 0 : oldbuf[pos[NE][0]*life->w + pos[NE][1]] == ALIVE_CELL) +
+                (pos[W ][0] == -1 || pos[W ][1] == -1 ? 0 : oldbuf[pos[W ][0]*life->w + pos[W ][1]] == ALIVE_CELL) +
+                (pos[E ][0] == -1 || pos[E ][1] == -1 ? 0 : oldbuf[pos[E ][0]*life->w + pos[E ][1]] == ALIVE_CELL) +
+                (pos[SW][0] == -1 || pos[SW][1] == -1 ? 0 : oldbuf[pos[SW][0]*life->w + pos[SW][1]] == ALIVE_CELL) +
+                (pos[S ][0] == -1 || pos[S ][1] == -1 ? 0 : oldbuf[pos[S ][0]*life->w + pos[S ][1]] == ALIVE_CELL) +
+                (pos[SE][0] == -1 || pos[SE][1] == -1 ? 0 : oldbuf[pos[SE][0]*life->w + pos[SE][1]] == ALIVE_CELL);
+            cell  = oldbuf[i*life->w + j];
+            alive = 1<<n & (cell == ALIVE_CELL ? life->stay_rule : life->born_rule);
+            if (alive)     *newbuf = ALIVE_CELL; // new cell is alive
+            else if (cell) *newbuf = cell - 1;   // new cell is dead and in the process of mold
+            else           *newbuf = 0;          // new cell is definitely dead
+            av_dlog(ctx, "i:%d j:%d live_neighbors:%d cell:%d -> cell:%d\n", i, j, n, cell, *newbuf);
+            newbuf++;
         }
     }
 
     life->buf_idx = !life->buf_idx;
 }
 
-static void fill_picture(AVFilterContext *ctx, AVFilterBufferRef *picref)
+static void fill_picture_monoblack(AVFilterContext *ctx, AVFrame *picref)
 {
     LifeContext *life = ctx->priv;
     uint8_t *buf = life->buf[life->buf_idx];
@@ -350,7 +353,7 @@ static void fill_picture(AVFilterContext *ctx, AVFilterBufferRef *picref)
         uint8_t byte = 0;
         uint8_t *p = picref->data[0] + i * picref->linesize[0];
         for (k = 0, j = 0; j < life->w; j++) {
-            byte |= buf[i*life->w+j]<<(7-k++);
+            byte |= (buf[i*life->w+j] == ALIVE_CELL)<<(7-k++);
             if (k==8 || j == life->w-1) {
                 k = 0;
                 *p++ = byte;
@@ -360,34 +363,79 @@ static void fill_picture(AVFilterContext *ctx, AVFilterBufferRef *picref)
     }
 }
 
+// divide by 255 and round to nearest
+// apply a fast variant: (X+127)/255 = ((X+127)*257+257)>>16 = ((X+128)*257)>>16
+#define FAST_DIV255(x) ((((x) + 128) * 257) >> 16)
+
+static void fill_picture_rgb(AVFilterContext *ctx, AVFrame *picref)
+{
+    LifeContext *life = ctx->priv;
+    uint8_t *buf = life->buf[life->buf_idx];
+    int i, j;
+
+    /* fill the output picture with the old grid buffer */
+    for (i = 0; i < life->h; i++) {
+        uint8_t *p = picref->data[0] + i * picref->linesize[0];
+        for (j = 0; j < life->w; j++) {
+            uint8_t v = buf[i*life->w + j];
+            if (life->mold && v != ALIVE_CELL) {
+                const uint8_t *c1 = life-> mold_color;
+                const uint8_t *c2 = life->death_color;
+                int death_age = FFMIN((0xff - v) * life->mold, 0xff);
+                *p++ = FAST_DIV255((c2[0] << 8) + ((int)c1[0] - (int)c2[0]) * death_age);
+                *p++ = FAST_DIV255((c2[1] << 8) + ((int)c1[1] - (int)c2[1]) * death_age);
+                *p++ = FAST_DIV255((c2[2] << 8) + ((int)c1[2] - (int)c2[2]) * death_age);
+            } else {
+                const uint8_t *c = v == ALIVE_CELL ? life->life_color : life->death_color;
+                AV_WB24(p, c[0]<<16 | c[1]<<8 | c[2]);
+                p += 3;
+            }
+        }
+    }
+}
+
 static int request_frame(AVFilterLink *outlink)
 {
     LifeContext *life = outlink->src->priv;
-    AVFilterBufferRef *picref = avfilter_get_video_buffer(outlink, AV_PERM_WRITE, life->w, life->h);
-    picref->video->sample_aspect_ratio = (AVRational) {1, 1};
+    AVFrame *picref = ff_get_video_buffer(outlink, life->w, life->h);
+    if (!picref)
+        return AVERROR(ENOMEM);
+    picref->sample_aspect_ratio = (AVRational) {1, 1};
     picref->pts = life->pts++;
-    picref->pos = -1;
 
-    fill_picture(outlink->src, picref);
+    life->draw(outlink->src, picref);
     evolve(outlink->src);
 #ifdef DEBUG
     show_life_grid(outlink->src);
 #endif
-
-    avfilter_start_frame(outlink, avfilter_ref_buffer(picref, ~0));
-    avfilter_draw_slice(outlink, 0, life->h, 1);
-    avfilter_end_frame(outlink);
-    avfilter_unref_buffer(picref);
-
-    return 0;
+    return ff_filter_frame(outlink, picref);
 }
 
 static int query_formats(AVFilterContext *ctx)
 {
-    static const enum PixelFormat pix_fmts[] = { PIX_FMT_MONOBLACK, PIX_FMT_NONE };
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+    LifeContext *life = ctx->priv;
+    enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_NONE, AV_PIX_FMT_NONE };
+    if (life->mold || memcmp(life-> life_color, "\xff\xff\xff", 3)
+                   || memcmp(life->death_color, "\x00\x00\x00", 3)) {
+        pix_fmts[0] = AV_PIX_FMT_RGB24;
+        life->draw = fill_picture_rgb;
+    } else {
+        pix_fmts[0] = AV_PIX_FMT_MONOBLACK;
+        life->draw = fill_picture_monoblack;
+    }
+    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
+
+static const AVFilterPad life_outputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_VIDEO,
+        .request_frame = request_frame,
+        .config_props  = config_props,
+    },
+    { NULL}
+};
 
 AVFilter avfilter_vsrc_life = {
     .name        = "life",
@@ -396,15 +444,7 @@ AVFilter avfilter_vsrc_life = {
     .init      = init,
     .uninit    = uninit,
     .query_formats = query_formats,
-
-    .inputs    = (const AVFilterPad[]) {
-        { .name = NULL}
-    },
-    .outputs   = (const AVFilterPad[]) {
-        { .name            = "default",
-          .type            = AVMEDIA_TYPE_VIDEO,
-          .request_frame   = request_frame,
-          .config_props    = config_props },
-        { .name = NULL}
-    },
+    .inputs        = NULL,
+    .outputs       = life_outputs,
+    .priv_class    = &life_class,
 };

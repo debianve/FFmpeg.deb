@@ -38,26 +38,30 @@ static uint32_t read_offs(AVCodecContext *avctx, GetBitContext *gb, uint32_t siz
 }
 
 static int mjpegb_decode_frame(AVCodecContext *avctx,
-                              void *data, int *data_size,
+                              void *data, int *got_frame,
                               AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     MJpegDecodeContext *s = avctx->priv_data;
     const uint8_t *buf_end, *buf_ptr;
-    AVFrame *picture = data;
     GetBitContext hgb; /* for the header */
     uint32_t dqt_offs, dht_offs, sof_offs, sos_offs, second_field_offs;
     uint32_t field_size, sod_offs;
+    int ret;
 
     buf_ptr = buf;
     buf_end = buf + buf_size;
+    s->got_picture = 0;
 
 read_header:
     /* reset on every SOI */
     s->restart_interval = 0;
     s->restart_count = 0;
     s->mjpb_skiptosod = 0;
+
+    if (buf_end - buf_ptr >= 1 << 28)
+        return AVERROR_INVALIDDATA;
 
     init_get_bits(&hgb, buf_ptr, /*buf_size*/(buf_end - buf_ptr)*8);
 
@@ -66,7 +70,7 @@ read_header:
     if (get_bits_long(&hgb, 32) != MKBETAG('m','j','p','g'))
     {
         av_log(avctx, AV_LOG_WARNING, "not mjpeg-b (bad fourcc)\n");
-        return 0;
+        return AVERROR_INVALIDDATA;
     }
 
     field_size = get_bits_long(&hgb, 32); /* field size */
@@ -111,8 +115,8 @@ read_header:
     av_log(avctx, AV_LOG_DEBUG, "sod offs: 0x%x\n", sod_offs);
     if (sos_offs)
     {
-//        init_get_bits(&s->gb, buf+sos_offs, (buf_end - (buf+sos_offs))*8);
-        init_get_bits(&s->gb, buf_ptr+sos_offs, field_size*8);
+        init_get_bits(&s->gb, buf_ptr + sos_offs,
+                      8 * FFMIN(field_size, buf_end - buf_ptr - sos_offs));
         s->mjpb_skiptosod = (sod_offs - sos_offs - show_bits(&s->gb, 16));
         s->start_code = SOS;
         if (ff_mjpeg_decode_sos(s, NULL, NULL) < 0 &&
@@ -126,38 +130,38 @@ read_header:
         if (s->bottom_field != s->interlace_polarity && second_field_offs)
         {
             buf_ptr = buf + second_field_offs;
-            second_field_offs = 0;
             goto read_header;
             }
     }
 
     //XXX FIXME factorize, this looks very similar to the EOI code
 
-    *picture= *s->picture_ptr;
-    *data_size = sizeof(AVFrame);
-
-    if(!s->lossless){
-        picture->quality= FFMAX3(s->qscale[0], s->qscale[1], s->qscale[2]);
-        picture->qstride= 0;
-        picture->qscale_table= s->qscale_table;
-        memset(picture->qscale_table, picture->quality, (s->width+15)/16);
-        if(avctx->debug & FF_DEBUG_QP)
-            av_log(avctx, AV_LOG_DEBUG, "QP: %d\n", picture->quality);
-        picture->quality*= FF_QP2LAMBDA;
+    if(!s->got_picture) {
+        av_log(avctx, AV_LOG_WARNING, "no picture\n");
+        return buf_size;
     }
 
-    return buf_ptr - buf;
+    if ((ret = av_frame_ref(data, s->picture_ptr)) < 0)
+        return ret;
+    *got_frame = 1;
+
+    if (!s->lossless && avctx->debug & FF_DEBUG_QP) {
+        av_log(avctx, AV_LOG_DEBUG, "QP: %d\n",
+               FFMAX3(s->qscale[0], s->qscale[1], s->qscale[2]));
+    }
+
+    return buf_size;
 }
 
 AVCodec ff_mjpegb_decoder = {
     .name           = "mjpegb",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_MJPEGB,
+    .id             = AV_CODEC_ID_MJPEGB,
     .priv_data_size = sizeof(MJpegDecodeContext),
     .init           = ff_mjpeg_decode_init,
     .close          = ff_mjpeg_decode_end,
     .decode         = mjpegb_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .max_lowres = 3,
-    .long_name = NULL_IF_CONFIG_SMALL("Apple MJPEG-B"),
+    .max_lowres     = 3,
+    .long_name      = NULL_IF_CONFIG_SMALL("Apple MJPEG-B"),
 };

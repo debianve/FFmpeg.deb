@@ -27,23 +27,33 @@
 #ifndef AVCODEC_THREAD_H
 #define AVCODEC_THREAD_H
 
+#include "libavutil/buffer.h"
+
 #include "config.h"
 #include "avcodec.h"
 
+typedef struct ThreadFrame {
+    AVFrame *f;
+    AVCodecContext *owner;
+    // progress->data is an array of 2 ints holding progress for top/bottom
+    // fields
+    AVBufferRef *progress;
+} ThreadFrame;
+
 /**
- * Waits for decoding threads to finish and resets internal
- * state. Called by avcodec_flush_buffers().
+ * Wait for decoding threads to finish and reset internal state.
+ * Called by avcodec_flush_buffers().
  *
  * @param avctx The context.
  */
 void ff_thread_flush(AVCodecContext *avctx);
 
 /**
- * Submits a new frame to a decoding thread.
+ * Submit a new frame to a decoding thread.
  * Returns the next available frame in picture. *got_picture_ptr
  * will be 0 if none is available.
  * The return value on success is the size of the consumed packet for
- * compatiblity with avcodec_decode_video2(). This means the decoder
+ * compatibility with avcodec_decode_video2(). This means the decoder
  * has to consume the full packet.
  *
  * Parameters are the same as avcodec_decode_video2().
@@ -62,8 +72,7 @@ int ff_thread_decode_frame(AVCodecContext *avctx, AVFrame *picture,
 void ff_thread_finish_setup(AVCodecContext *avctx);
 
 /**
- * Notifies later decoding threads when part of their reference picture
- * is ready.
+ * Notify later decoding threads when part of their reference picture is ready.
  * Call this when some part of the picture is finished decoding.
  * Later calls with lower values of progress have no effect.
  *
@@ -72,10 +81,10 @@ void ff_thread_finish_setup(AVCodecContext *avctx);
  * @param field The field being decoded, for field-picture codecs.
  * 0 for top field or frame pictures, 1 for bottom field.
  */
-void ff_thread_report_progress(AVFrame *f, int progress, int field);
+void ff_thread_report_progress(ThreadFrame *f, int progress, int field);
 
 /**
- * Waits for earlier decoding threads to finish reference pictures
+ * Wait for earlier decoding threads to finish reference pictures.
  * Call this before accessing some part of a picture, with a given
  * value for progress, and it will return after the responsible decoding
  * thread calls ff_thread_report_progress() with the same or
@@ -86,17 +95,27 @@ void ff_thread_report_progress(AVFrame *f, int progress, int field);
  * @param field The field being referenced, for field-picture codecs.
  * 0 for top field or frame pictures, 1 for bottom field.
  */
-void ff_thread_await_progress(AVFrame *f, int progress, int field);
+void ff_thread_await_progress(ThreadFrame *f, int progress, int field);
+
+/**
+ * Wrapper around get_format() for frame-multithreaded codecs.
+ * Call this function instead of avctx->get_format().
+ * Cannot be called after the codec has called ff_thread_finish_setup().
+ *
+ * @param avctx The current context.
+ * @param fmt The list of available formats.
+ */
+enum AVPixelFormat ff_thread_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt);
 
 /**
  * Wrapper around get_buffer() for frame-multithreaded codecs.
- * Call this function instead of avctx->get_buffer(f).
+ * Call this function instead of ff_get_buffer(f).
  * Cannot be called after the codec has called ff_thread_finish_setup().
  *
  * @param avctx The current context.
  * @param f The frame to write into.
  */
-int ff_thread_get_buffer(AVCodecContext *avctx, AVFrame *f);
+int ff_thread_get_buffer(AVCodecContext *avctx, ThreadFrame *f, int flags);
 
 /**
  * Wrapper around release_buffer() frame-for multithreaded codecs.
@@ -109,7 +128,9 @@ int ff_thread_get_buffer(AVCodecContext *avctx, AVFrame *f);
  * @param avctx The current context.
  * @param f The picture being released.
  */
-void ff_thread_release_buffer(AVCodecContext *avctx, AVFrame *f);
+void ff_thread_release_buffer(AVCodecContext *avctx, ThreadFrame *f);
+
+int ff_thread_ref_frame(ThreadFrame *dst, ThreadFrame *src);
 
 int ff_thread_init(AVCodecContext *s);
 void ff_thread_free(AVCodecContext *s);
