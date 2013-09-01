@@ -125,7 +125,7 @@ confflags += $(extra_common_confflags)
 confflags += $(call cond_enable,/usr/include/va/va.h,vaapi)
 
 # this part below is intended for the 'ffmpeg' package in ubuntu/multiverse
-gpl_confflags += $(call cond_enable,/usr/include/dirac/libdirac_decoder/dirac_parser.h,libdirac)
+#gpl_confflags += $(call cond_enable,/usr/include/dirac/libdirac_decoder/dirac_parser.h,libdirac)
 gpl_confflags += $(call cond_enable,/usr/include/lame/lame.h,libmp3lame)
 gpl_confflags += $(call cond_enable,/usr/include/librtmp/http.h,librtmp)
 gpl_confflags += $(call cond_enable,/usr/include/x264.h,libx264)
